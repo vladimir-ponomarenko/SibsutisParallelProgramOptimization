@@ -3,7 +3,6 @@
 # This script builds the project and runs tests
 
 set -e
-
 echo "=== DNA Motif Finder Build Script ==="
 
 if [ ! -f "CMakeLists.txt" ]; then

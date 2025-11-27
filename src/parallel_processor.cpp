@@ -198,9 +198,7 @@ std::vector<MotifResult> ParallelProcessor::processMotifsParallel(
 #pragma omp parallel
   {
     std::vector<MotifResult> local_results;
-    local_results.reserve(motifs.size());
-
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(guided)
     for (size_t i = 0; i < motifs.size(); ++i) {
       MotifResult result = motif_finder_->findSingleMotif(sequences, motifs[i]);
       local_results.push_back(result);

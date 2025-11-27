@@ -4,6 +4,7 @@
 #include "concepts.h"
 #include <array>
 #include <cctype>
+#include <cstdint>
 #include <ranges>
 #include <span>
 #include <unordered_set>
@@ -15,14 +16,17 @@ namespace dna_motif {
  *
  * IUPAC codes allow representation of ambiguous nucleotides:
  * A, T, G, C - standard nucleotides
- * R = A/G, Y = T/C, S = G/C, W = A/T, K = G/T, M = A/C
- * B = C/G/T, D = A/G/T, H = A/C/T, V = A/C/G
- * N = A/T/G/C (any nucleotide)
+ * Binary representation (Table 12 from task):
+ * A: 0001, T: 0010, G: 0100, C: 1000
+ * R = A/G (0101), Y = T/C (1010), etc.
+ * N = 1111
  */
 class IUPACCodes {
 public:
   using nucleotide_set = std::array<char, 4>;
   using iupac_map_type = std::array<nucleotide_set, 256>;
+  using bitmask_map_type = std::array<uint8_t, 256>;
+
   IUPACCodes();
 
   // Singleton
@@ -31,63 +35,33 @@ public:
     return instance;
   }
 
-  /**
-   * @brief Check if a character is a valid IUPAC code
-   * @param code Character to check
-   * @return true if valid IUPAC code
-   */
   [[nodiscard]] bool isValidIUPACCode(char code) const noexcept {
     char upper_code = std::toupper(code);
     return valid_codes_[static_cast<unsigned char>(upper_code)];
   }
 
+  [[nodiscard]] std::vector<char> getNucleotides(char code) const noexcept;
+
+  [[nodiscard]] bool matches(char nucleotide, char iupac_code) const noexcept;
+
   /**
-   * @brief Get all possible nucleotides for an IUPAC code
-   * @param code IUPAC code character
-   * @return Vector of possible nucleotides
+   * @brief Get 4-bit mask for a character (Table 12)
+   * @param code Character (A, T, G, C, R, Y...)
+   * @return 4-bit mask (e.g. A=1, T=2)
    */
-  [[nodiscard]] std::vector<char> getNucleotides(char code) const noexcept {
-    char upper_code = std::toupper(code);
-    if (!isValidIUPACCode(upper_code)) {
-      return {};
-    }
-
-    const auto &nucleotides =
-        iupac_map_[static_cast<unsigned char>(upper_code)];
-    std::vector<char> result;
-
-    size_t count = 0;
-    for (char nuc : nucleotides) {
-      if (nuc != 0)
-        count++;
-    }
-
-    result.reserve(count);
-    for (char nuc : nucleotides) {
-      if (nuc != 0)
-        result.push_back(nuc);
-    }
-
-    return result;
+  [[nodiscard]] uint8_t getBitmask(char code) const noexcept {
+    return bitmask_map_[static_cast<unsigned char>(std::toupper(code))];
   }
 
   /**
-   * @brief Check if a nucleotide matches an IUPAC code
-   * @param nucleotide Single nucleotide (A, T, G, C)
-   * @param iupac_code IUPAC code character
-   * @return true if nucleotide matches the IUPAC code
+   * @brief Create a 32-bit hash from an 8-char sequence/motif
+   * Packs 8 chars * 4 bits into one uint32_t.
+   * @param sequence String view of length 8
+   * @return Packed hash
    */
-  [[nodiscard]] bool matches(char nucleotide, char iupac_code) const noexcept {
-    char upper_nucleotide = std::toupper(nucleotide);
-    char upper_iupac_code = std::toupper(iupac_code);
+  [[nodiscard]] uint32_t hashSequence(std::string_view sequence) const noexcept;
 
-    if (!isValidIUPACCode(upper_iupac_code))
-      return false;
-
-    const auto nucleotides = getNucleotides(upper_iupac_code);
-    return std::ranges::find(nucleotides, upper_nucleotide) !=
-           nucleotides.end();
-  }
+  // ----------------------------------------------------
 
   /**
    * @brief Check if a DNA sequence matches a motif pattern
@@ -97,7 +71,9 @@ public:
    * @return true if sequence matches motif starting at start_pos
    */
   [[nodiscard]] bool matchesMotif(std::string_view sequence,
+
                                   std::string_view motif,
+
                                   size_t start_pos) const noexcept;
 
   /**
@@ -130,7 +106,7 @@ public:
   /**
    * @brief Check if a sequence contains only valid IUPAC codes
    * @param sequence Sequence to check
-   * @return true if all characters are valid IUPAC codes
+   * @return true if all characters are valid IUPAC code
    */
   [[nodiscard]] bool isValidSequence(std::string_view sequence) const noexcept {
     return std::ranges::all_of(sequence,
@@ -146,11 +122,12 @@ public:
 
 private:
   iupac_map_type iupac_map_;
+  bitmask_map_type bitmask_map_;
   std::array<bool, 256> valid_codes_;
-
   constexpr void initializeIUPACMap() noexcept;
   constexpr void addMapping(char iupac_code,
-                            std::initializer_list<char> nucleotides) noexcept;
+                            std::initializer_list<char> nucleotides,
+                            uint8_t mask) noexcept;
 };
 
 } // namespace dna_motif

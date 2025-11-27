@@ -33,27 +33,7 @@ MotifFinder::findMotifs(std::span<const ChIPSequence> sequences,
 MotifResult
 MotifFinder::findSingleMotif(std::span<const ChIPSequence> sequences,
                              const Motif &motif) {
-  Timer timer;
-  MotifResult result(motif.pattern);
-
-  auto sequence_indices = std::views::iota(0uz, sequences.size());
-
-  for (const auto &[i, sequence] :
-       std::views::zip(sequence_indices, sequences)) {
-    auto matches = findMotifInSequence(sequence, motif, i);
-
-    if (!matches.empty()) {
-      result.match_count++;
-      result.matches.push_back(std::move(matches[0]));
-    }
-  }
-
-  result.calculateFrequency(sequences.size());
-
-  double motif_time = timer.elapsed();
-  updatePerformanceStats("find_single_motif", motif_time);
-
-  return result;
+  return processSingleMotif(sequences, motif);
 }
 
 std::vector<MotifMatch>
@@ -67,20 +47,21 @@ MotifFinder::findMotifInSequence(const ChIPSequence &sequence,
       iupac_codes_.findMotifMatches(sequence.sequence, motif.pattern);
 
   std::vector<MotifMatch> matches;
-  auto match_objects =
-      match_positions | std::views::transform([&](size_t pos) {
-        std::string matched_sequence =
-            sequence.sequence.substr(pos, motif.pattern.length());
-        return MotifMatch(sequence_index, pos, matched_sequence);
-      });
+  matches.reserve(match_positions.size());
 
-  std::ranges::copy(match_objects, std::back_inserter(matches));
+  for (size_t pos : match_positions) {
+    std::string matched_sequence =
+        sequence.sequence.substr(pos, motif.pattern.length());
+    matches.emplace_back(sequence_index, pos, std::move(matched_sequence));
+  }
+
   return matches;
 }
 
 bool MotifFinder::matchesAtPosition(std::string_view sequence,
                                     std::string_view motif,
                                     size_t start_pos) const noexcept {
+  // Uses bitwise comparison
   return iupac_codes_.matchesMotif(sequence, motif, start_pos);
 }
 
@@ -95,11 +76,10 @@ MotifFinder::processSingleMotif(std::span<const ChIPSequence> sequences,
   Timer timer;
   MotifResult result(motif.pattern);
 
-  auto sequence_indices = std::views::iota(0uz, sequences.size());
+  size_t total_seqs = sequences.size();
+  for (size_t i = 0; i < total_seqs; ++i) {
 
-  for (const auto &[i, sequence] :
-       std::views::zip(sequence_indices, sequences)) {
-    auto matches = findMotifInSequence(sequence, motif, i);
+    auto matches = findMotifInSequence(sequences[i], motif, i);
 
     if (!matches.empty()) {
       result.match_count++;
